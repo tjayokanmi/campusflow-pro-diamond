@@ -34,3 +34,7 @@ class TestSLADeadline(unittest.TestCase):
         naive_start = datetime.datetime(2026, 6, 1, 10, 0, 0)
         with self.assertRaises(ValueError):
             calculate_due_at("high", naive_start)
+
+        original_start = start_utc 
+        calculate_due_at("high", start_utc)
+        self.assertEqual(start_utc, original_start)
