@@ -1,5 +1,7 @@
 """CampusFlow: Command-line Technical Support Ticket Management System."""
 
+from datetime import datetime, timezone
+from campusflow.queues import sla_attention_queue
 import sys
 from campusflow.storage import load_tickets, save_tickets, DEFAULT_DATA_PATH
 from campusflow.tickets import create_ticket
@@ -10,7 +12,7 @@ from campusflow.workflow import (
     get_work_queue,
 )
 from campusflow.reports import generate_report
-
+from campusflow.history import get_ticket_history
 
 def print_ticket_summary(ticket: dict) -> None:
     """Print a single line summary of a ticket."""
@@ -33,6 +35,10 @@ def print_ticket_details(ticket: dict) -> None:
     print(f"Priority:         {ticket.get('priority')}")
     print(f"Status:           {ticket.get('status')}")
     print(f"Assigned To:      {ticket.get('assigned_to') or 'Unassigned'}")
+    print(f"Created At:       {ticket.get('created_at', 'N/A')}")
+    print(f"Updated At:       {ticket.get('updated_at', 'N/A')}")
+    print(f"Due At:           {ticket.get('due_at', 'N/A')}")
+    print(f"Escalation Cycle: {ticket.get('escalation_cycle', 0)}")
     print("=" * 50)
 
 
@@ -106,7 +112,30 @@ def handle_assign_ticket(tickets: list[dict], data_path: str) -> None:
     except ValueError as err:
         print(f"[Error] Assignment failed: {err}")
 
+def handle_ticket_history(
+    events: list[dict],
+) -> None:
+    """Display chronological audit history for a ticket."""
 
+    print("\n--- Ticket History ---")
+
+    ticket_id = input("Enter ticket ID: ").strip()
+
+    history = get_ticket_history(events, ticket_id)
+
+    if not history:
+        print(f"No history found for ticket {ticket_id}.")
+        return
+
+    for event in history:
+        print("-" * 50)
+        print(f"Event ID:      {event['event_id']}")
+        print(f"Event Type:    {event['event_type']}")
+        print(f"Actor:         {event['actor']}")
+        print(f"Timestamp:     {event['timestamp']}")
+        print(f"Before Status: {event['before_status']}")
+        print(f"After Status:  {event['after_status']}")
+        print(f"Details:       {event['details']}")
 def handle_update_status(tickets: list[dict], data_path: str) -> None:
     """Update lifecycle status of an active ticket."""
     print("\n--- Update Ticket Status ---")
@@ -157,10 +186,10 @@ def handle_work_queue(tickets: list[dict]) -> None:
         print(f"{idx}. [{tid}] Priority: {pri:<8} Status: {status:<12} Assigned: {assigned:<15} | {title}")
 
 
-def handle_reports(tickets: list[dict]) -> None:
+def handle_reports(tickets: list[dict], events: list[dict] | None = None,) -> None:
     """Display aggregate ticket metrics and breakdown."""
     print("\n--- Ticket Statistics Report ---")
-    report = generate_report(tickets)
+    report = generate_report(tickets, events=events)
     print(f"Total Tickets: {report['total']}")
     print("\nBreakdown by Status:")
     for status, count in report["by_status"].items():
@@ -168,7 +197,43 @@ def handle_reports(tickets: list[dict]) -> None:
     print("\nBreakdown by Priority:")
     for pri, count in report["by_priority"].items():
         print(f"  - {pri:<12}: {count}")
+    print("\nSLA Metrics:")
+    print(f"  - Overdue Tickets:   {report['overdue_count']}")
+    print(f"  - Escalated Tickets: {report['escalated_count']}")
+def handle_sla_attention_queue(tickets: list[dict]) -> None:
+    """Display unresolved tickets ordered by SLA urgency."""
 
+    print("\n--- SLA Attention Queue ---")
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        queue = sla_attention_queue(tickets, now)
+    except (ValueError, TypeError, KeyError) as err:
+        print(f"[Error] Could not generate SLA queue: {err}")
+        return
+
+    if not queue:
+        print("No unresolved tickets.")
+        return
+
+    print(f"Total unresolved tickets: {len(queue)}")
+    print("-" * 65)
+
+    for ticket in queue:
+        due_at = datetime.fromisoformat(ticket["due_at"])
+
+        overdue = now > due_at
+
+        marker = "OVERDUE" if overdue else "ON TIME"
+
+        print(
+            f"[{ticket['id']}] "
+            f"Priority: {ticket['priority'].upper():<8} "
+            f"Status: {ticket['status']:<12} "
+            f"SLA: {marker:<8} "
+            f"Due: {ticket['due_at']}"
+        )
 
 def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
     """Run the main CampusFlow CLI interactive menu."""
@@ -178,7 +243,7 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
         print(f"[FATAL] Data loading error: {err}")
         print("Application exiting to prevent overwriting corrupted data.")
         sys.exit(1)
-
+    events = []
     print("========================================")
     print(" Welcome to CampusFlow Helpdesk System  ")
     print("========================================")
@@ -193,10 +258,13 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
         print("6. Reopen Resolved Ticket")
         print("7. View Work Queue")
         print("8. View Reports")
-        print("9. Exit")
+        print("9. View SLA Attention Queue")
+        print("10. View Ticket History")
+        print("11. Engineering Knowledge Lab")
+        print("12. Exit")
 
         try:
-            choice = input("\nSelect an option (1-9): ").strip()
+            choice = input("\nSelect an option (1-12): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nExiting CampusFlow. Goodbye!")
             break
@@ -216,13 +284,18 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
         elif choice == "7":
             handle_work_queue(tickets)
         elif choice == "8":
-            handle_reports(tickets)
+            handle_reports(tickets, events)
         elif choice == "9":
+            handle_sla_attention_queue(tickets)
+
+        elif choice == "10":
+            handle_ticket_history(events)
+        elif choice == "11":
+            print("Engineering Knowledge Lab integration coming next.")
+
+        elif choice == "12":
             print("Exiting CampusFlow. Goodbye!")
             break
-        else:
-            print("[Invalid Option] Please enter a number between 1 and 9.")
-
 
 if __name__ == "__main__":
     main_menu()
