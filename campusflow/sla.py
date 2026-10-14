@@ -27,6 +27,16 @@ def is_overdue(ticket, now):
     if not isinstance(now, datetime.datetime):
         raise TypeError("now has to be datetime")
     
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    
+    if not isinstance(ticket["due_at"], datetime.datetime):
+        raise TypeError("We only accept datetime as input")
+    
+    if ticket["due_at"].tzinfo is None or ticket["due_at"].utcoffset() is None:
+        raise ValueError("due date must be timezone-aware")
+    
+    
     if ticket["status"] not in ["open", "in_progress", "resolved"]:
         raise ValueError("Invalid status")
     
@@ -34,6 +44,6 @@ def is_overdue(ticket, now):
         raise TypeError("We only accept datetime as input")
 
     if ticket["status"] != "resolved" and ticket["due_at"] < now: 
-        return "Overdue"
+        return f"Ticket is Overdue, the deadline is {ticket["due_at"]}"
     else: 
-        return "Ticket not overdue"
+        return f"Ticket not overdue, deadline is {ticket["due_at"]}"
