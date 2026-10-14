@@ -24,4 +24,16 @@ def calculate_due_at(priority, cycle_start):
         raise ValueError("You have only 4 options: critical, high, medium, and low")
     
 def is_overdue(ticket, now):
+    if not isinstance(now, datetime.datetime):
+        raise TypeError("now has to be datetime")
     
+    if ticket["status"] not in ["open", "in_progress", "resolved"]:
+        raise ValueError("Invalid status")
+    
+    if not isinstance(ticket["due_at"], datetime.datetime):
+        raise TypeError("We only accept datetime as input")
+
+    if ticket["status"] != "resolved" and ticket["due_at"] < now: 
+        return "Overdue"
+    else: 
+        return "Ticket not overdue"
