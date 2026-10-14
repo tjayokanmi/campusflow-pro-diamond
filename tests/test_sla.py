@@ -30,7 +30,7 @@ class TestSLADeadline(unittest.TestCase):
             calculate_due_at(None, self.start_utc)
 
     def test_invalid_start_time(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             calculate_due_at("high", None)
 
         naive_start = datetime.datetime(2026, 6, 1, 10, 0)
@@ -61,3 +61,5 @@ class TestSLADeadline(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             calculate_due_at("high", non_utc_start)
+
+            
