@@ -23,4 +23,4 @@ def sla_attention_queue(tickets, now):
         if ticket["status"] in ("open", "in_progress")
     ]
 
-    return sorted[unresolved, key=sort_key]
+    return sorted(unresolved, key=sort_key)
