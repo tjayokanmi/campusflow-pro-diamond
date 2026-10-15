@@ -1,6 +1,6 @@
 import datetime
 import unittest 
-from campusflow.sla import calculate_due_at
+from campusflow.sla import calculate_due_at, is_overdue
 
 class TestSLADeadline(unittest.TestCase):
     def setUp(self):
@@ -62,4 +62,146 @@ class TestSLADeadline(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_due_at("high", non_utc_start)
 
+
+class TestSLAOverdue(unittest.TestCase):
+
+    def setUp(self):
+        self.now = datetime.datetime(
+            2026, 6, 1, 10, 0, 0,
+            tzinfo=datetime.timezone.utc,
+            )
+    def test_is_overdue_tomorrow(self):
+        ticket = {
+        "status": "open",
+        "due_at" : datetime.datetime(
+            2026, 6, 2, 10, 0, 0,
+            tzinfo=datetime.timezone.utc,
+            )
+    }
+        actual = is_overdue(ticket, self.now)
+        self.assertFalse(actual)
+
+    def test_is_overdue_now(self):
+        ticket = {
+        "status": "open",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 10, 0, 0,
+            tzinfo=datetime.timezone.utc,
+            )
+    }
+        actual = is_overdue(ticket, self.now)
+        self.assertFalse(actual)
+
+    def test_is_overdue_second(self):
+        ticket = {
+        "status": "open",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 9, 59, 59,
+            tzinfo=datetime.timezone.utc,
+            )
+        }
+        actual = is_overdue(ticket, self.now)
+        self.assertTrue(actual)
+
+    def test_is_overdue_in_progress_deadline_passed(self):
+        ticket = {
+        "status": "in_progress",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 9, 59, 59,
+            tzinfo=datetime.timezone.utc,
+            )
+        }
+        actual = is_overdue(ticket, self.now)
+        self.assertTrue(actual)
+
+
+    def test_is_overdue_resolved_deadline_passed(self):
+        ticket = {
+        "status": "resolved",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 9, 59, 59,
+            tzinfo=datetime.timezone.utc,
+            )
+    }
+        actual = is_overdue(ticket, self.now)
+        self.assertFalse(actual)
+
+    def test_naive_due_at(self):
+        ticket = {
+        "status": "resolved",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 11, 0, 0
+            )
+        }
+        with self.assertRaises(ValueError):
+            is_overdue(ticket, self.now)
+
+    def test_now_naive(self):
+        now = datetime.datetime(
+            2026, 6, 1, 10, 0, 0,
+            )
+        
+        ticket = {
+        "status": "resolved",
+        "due_at" : datetime.datetime(
+            2026, 6, 1, 11, 0, 0,
+            tzinfo=datetime.timezone.utc,
+            )
+        }
+
+        with self.assertRaises(ValueError):
+            is_overdue(ticket, now)
+
+    def test_due_at_string(self):   
+        ticket = {
+        "status": "resolved",
+        "due_at" : 'datetime'
+        }
             
+        with self.assertRaises(TypeError):
+            is_overdue(ticket, self.now)
+
+    def test_due_at_non_utc(self):
+        ticket = {
+            "status": "open",
+            "due_at": datetime.datetime(
+                2026, 6, 1, 11, 0, 0,
+                tzinfo=datetime.timezone(
+                    datetime.timedelta(hours=1)
+                ),
+            ),
+        }
+
+        with self.assertRaises(ValueError):
+            is_overdue(ticket, self.now)
+    
+    def test_unsupported_status(self):
+        ticket = {
+        "status": "pending",
+         "due_at" : datetime.datetime(
+            2026, 6, 1, 9, 59, 59,
+            tzinfo=datetime.timezone.utc,
+            )
+        }
+            
+        with self.assertRaises(ValueError):
+            is_overdue(ticket, self.now)
+
+
+    def test_missing_due_at(self):
+        ticket = {"status": "open"}
+
+        with self.assertRaises(KeyError):
+            is_overdue(ticket, self.now)
+
+
+    def test_missing_status(self):
+        ticket = {
+            "due_at": datetime.datetime(
+                2026, 6, 1, 9, 59, 59,
+                tzinfo=datetime.timezone.utc,
+            )
+        }
+
+        with self.assertRaises(KeyError):
+            is_overdue(ticket, self.now)
