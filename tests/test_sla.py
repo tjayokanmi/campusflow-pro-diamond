@@ -175,7 +175,7 @@ class TestSLAOverdue(unittest.TestCase):
         with self.assertRaises(ValueError):
             is_overdue(ticket, self.now)
     
-    def test_unsupported(self):
+    def test_unsupported_status(self):
         ticket = {
         "status": "pending",
          "due_at" : datetime.datetime(
