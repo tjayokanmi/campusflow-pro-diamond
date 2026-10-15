@@ -24,11 +24,15 @@ def calculate_due_at(priority, cycle_start):
         raise ValueError("You have only 4 options: critical, high, medium, and low")
     
 def is_overdue(ticket, now):
+
     if not isinstance(now, datetime.datetime):
         raise TypeError("now has to be datetime")
     
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
+    
+    if now.utcoffset() != datetime.timedelta(0):
+        raise ValueError("now must have a UTC offset of zero")
     
     if not isinstance(ticket["due_at"], datetime.datetime):
         raise TypeError("We only accept datetime as input")
@@ -36,14 +40,13 @@ def is_overdue(ticket, now):
     if ticket["due_at"].tzinfo is None or ticket["due_at"].utcoffset() is None:
         raise ValueError("due date must be timezone-aware")
     
+    if ticket['due_at'].utcoffset() != datetime.timedelta(0):
+        raise ValueError("due date must have a UTC offset of zero")
     
     if ticket["status"] not in ["open", "in_progress", "resolved"]:
         raise ValueError("Invalid status")
     
-    if not isinstance(ticket["due_at"], datetime.datetime):
-        raise TypeError("We only accept datetime as input")
-
     if ticket["status"] != "resolved" and ticket["due_at"] < now: 
-        return f"Ticket is Overdue, the deadline is {ticket["due_at"]}"
+        return True
     else: 
-        return f"Ticket not overdue, deadline is {ticket["due_at"]}"
+        return False
