@@ -1,5 +1,7 @@
 import datetime
 
+from campusflow.history import record_event
+
 
 def calculate_due_at(priority, cycle_start):
     
@@ -58,3 +60,41 @@ def is_overdue(ticket, now):
         raise ValueError("Invalid ticket status")
 
     return status != "resolved" and due_at < now
+
+def escalate_overdue(tickets, events, now, actor):
+    escalated = []
+    already_escalated = []
+
+    for ticket in tickets:
+        if not is_overdue(ticket, now):
+            continue
+
+        ticket_id = ticket["id"]
+
+        has_escalation = any(
+            event["ticket_id"] == ticket_id
+            and event["event_type"] == "escalated"
+            for event in events
+        )
+
+        if has_escalation:
+            already_escalated.append(ticket_id)
+            continue
+
+        record_event(
+            events=events,
+            ticket_id=ticket_id,
+            event_type="escalated",
+            actor=actor,
+            before_status=ticket["status"],
+            after_status=ticket["status"],
+            details="SLA deadline exceeded",
+            now=now,
+        )
+
+        escalated.append(ticket_id)
+
+    return {
+        "escalated": escalated,
+        "already_escalated": already_escalated,
+    }
