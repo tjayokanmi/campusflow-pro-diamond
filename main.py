@@ -1,5 +1,13 @@
 """CampusFlow: Command-line Technical Support Ticket Management System."""
 
+from campusflow.operations import (
+    create_ticket_with_audit,
+    assign_ticket_with_audit,
+    update_status_with_audit,
+    reopen_ticket_with_audit,
+)
+from campusflow.duplicates import detect_duplicates
+from campusflow.knowledge_lab import run_knowledge_lab
 from datetime import datetime, timezone
 from campusflow.queues import sla_attention_queue
 import sys
@@ -59,16 +67,41 @@ def handle_create_ticket(tickets: list[dict], data_path: str) -> None:
         return
 
     try:
-        new_ticket = create_ticket(
-            title=title,
-            category=category,
-            urgency=urgency,
-            affected_users=affected_users,
-            records=tickets,
+    # Validate the ticket before checking for duplicates.
+    new_ticket = create_ticket(
+        title=title,
+        category=category,
+        urgency=urgency,
+        affected_users=affected_users,
+        records=tickets,
+    )
+
+    duplicates = detect_duplicates(
+        tickets,
+        new_ticket["category"],
+        new_ticket["title"],
+    )
+
+    if duplicates:
+        print(
+            f"\n[Warning] Potential duplicate tickets: "
+            f"{', '.join(duplicates)}"
         )
-    except ValueError as err:
-        print(f"[Error] Failed to create ticket: {err}")
-        return
+
+        confirmation = input(
+            "Do you still want to create this ticket? (yes/no): "
+        ).strip().lower()
+
+        if confirmation != "yes":
+            print("[Cancelled] Ticket creation cancelled.")
+            return
+
+    tickets.append(new_ticket)
+    save_tickets(tickets, data_path)
+
+except ValueError as err:
+    print(f"[Error] Failed to create ticket: {err}")
+    return
 
     tickets.append(new_ticket)
     save_tickets(tickets, data_path)
@@ -291,7 +324,7 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
         elif choice == "10":
             handle_ticket_history(events)
         elif choice == "11":
-            print("Engineering Knowledge Lab integration coming next.")
+            run_knowledge_lab()
 
         elif choice == "12":
             print("Exiting CampusFlow. Goodbye!")
