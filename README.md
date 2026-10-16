@@ -30,8 +30,9 @@ The application is co-developed by a two-engineer team:
 
 ---
 
-## Features (F1–F7)
+## Features (Phase 1 & Phase 2)
 
+### Phase 1 Baseline
 - **F1 — Ticket Creation**: Create support requests with title, category, urgency, and affected users. Automatically computes priority using rule hierarchy.
 - **F2 — List & View Details**: Browse all active and resolved tickets, or inspect individual ticket details.
 - **F3 — Assignment**: Assign tickets to staff members; prevents whitespace-only names and rejects assigning resolved tickets without reopening.
@@ -39,6 +40,15 @@ The application is co-developed by a two-engineer team:
 - **F5 — Work Queue**: Displays active, unresolved tickets sorted by priority (`critical` > `high` > `medium` > `low`) with deterministic tie-breaking based on numeric ticket IDs (`T002` before `T010`).
 - **F6 — Reports**: Generates summary statistics including total ticket count and complete breakdowns across all valid statuses and priorities (preserving zero-count entries).
 - **F7 — JSON Persistence**: Persists tickets to `data/tickets.json` across sessions using atomic file replacement (`tempfile` + `os.replace`). Handles missing files gracefully on first run and rejects corrupted or malformed JSON without silent data loss.
+
+### Phase 2 Advanced Engineering
+- **F8 — Time-Based SLAs & Overdue Detection**: Strict UTC timezone-aware calculation for deadlines across all priority tiers (Critical: 1h, High: 4h, Medium: 24h, Low: 48h). Strict overdue detection (`due_at < now`) where tickets exactly at their deadline are on time.
+- **F9 — Idempotent Escalation Engine**: Manual and CLI-driven escalation scans that append at most one `ESCALATE` event per SLA cycle. Reopening a resolved ticket recalculates `due_at` and starts a new cycle, allowing a second legitimate escalation if breached again. Ticket fields remain completely immutable during escalation.
+- **F10 — Append-Only Audit History**: All successful operations (`CREATE`, `ASSIGN`, `START`, `RESOLVE`, `REOPEN`, `ESCALATE`) append structured audit events with unique IDs, actors, and UTC timestamps.
+- **F11 — Duplicate Detection & Confirmation**: Checks normalized title and category against active unresolved tickets before creation, warning operators and requiring confirmation.
+- **F12 — SLA Attention Queue & Enhanced Reports**: Unresolved tickets sorted by nearest SLA deadline with visual status indicators (`OVERDUE` vs `ON TIME`).
+- **F13 — Schema Version 2 JSON Storage**: Unified root structure (`schema_version: 2`, `tickets: []`, `events: []`) with atomic tempfile replacement and optional backwards-compatible v1 migration.
+- **F14 — Engineering Knowledge Lab**: Interactive 10-question CLI scenario quiz for Engineer A and Engineer B with scored results, explanation tracking, and persistence to `data/quiz_sessions.json`.
 
 ---
 
@@ -93,13 +103,13 @@ Run the complete automated test suite using `unittest`:
 python3 -m unittest discover -s tests -v
 ```
 
-All 96 automated tests should pass:
+All 101 automated tests should pass:
 - `test_priority.py`: 1 test (covering priority calculation boundaries)
-- `test_tickets.py`: 7 tests (creation validation, boundary checks, ID generation)
+- `test_tickets.py`: 11 tests (creation validation, 12-field shape, boundary checks, ID generation, ISO timestamps)
 - `test_workflow.py`: 22 tests (assignment, transition matrix, unassigned guards, reopening, queue sorting, tie-breaking)
 - `test_reports.py`: 8 tests (empty lists, mixed counts, zero-count preservation, mutation checks, SLA metrics)
 - `test_sla.py`: 16 tests (SLA durations, UTC validation, boundary thresholds)
-- `test_escalation.py`: 10 tests (idempotent escalation, reopening cycles, boundary thresholds, non-mutation)
+- `test_escalation.py`: 11 tests (idempotent escalation, reopening cycles, boundary thresholds, non-mutation, ISO string support)
 - `test_storage.py`: 23 tests (v1 legacy & v2 schema validation, round trips, corruption handling, relational checks, ID continuity, migration)
 - `test_operations.py`: 6 tests (audited operations, rollback on failure)
 - `test_knowledge_lab.py`: 3 tests (knowledge lab evaluation and scoring)

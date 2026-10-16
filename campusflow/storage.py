@@ -88,6 +88,12 @@ def validate_ticket(ticket: dict, idx: int | None = None) -> None:
         raise ValueError(f"{prefix}assigned_to must be a string or None, found {type(assigned).__name__}")
 
     # Optional fields validation
+    for field in ("created_at", "updated_at", "due_at"):
+        if field in ticket:
+            val = ticket[field]
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{prefix}{field} must be a non-empty ISO datetime string")
+
     if "escalation_cycle" in ticket:
         cycle = ticket["escalation_cycle"]
         if not isinstance(cycle, int) or isinstance(cycle, bool) or cycle < 0:

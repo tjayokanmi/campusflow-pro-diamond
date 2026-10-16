@@ -272,5 +272,22 @@ class TestSLAEscalateDue(unittest.TestCase):
         self.assertEqual(len(self.events), 0)
 
 
+    def test_escalate_overdue_with_iso_string_due_at(self):
+        """escalate_overdue seamlessly handles tickets loaded from JSON with ISO string due_at."""
+        str_ticket = {
+            "id": "T050",
+            "due_at": "2026-10-15T10:00:00+00:00",
+            "status": "open",
+            "priority": "high",
+            "assigned_to": "Bob",
+        }
+        result = escalate_overdue([str_ticket], self.events, self.now, self.actor)
+        self.assertEqual(result["escalated"], ["T050"])
+        self.assertEqual(len(self.events), 1)
+        # ticket["due_at"] remains a string (not mutated)
+        self.assertIsInstance(str_ticket["due_at"], str)
+        self.assertEqual(str_ticket["due_at"], "2026-10-15T10:00:00+00:00")
+
+
 if __name__ == "__main__":
     unittest.main()

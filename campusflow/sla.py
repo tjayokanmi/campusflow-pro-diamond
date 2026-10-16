@@ -101,7 +101,15 @@ def escalate_overdue(tickets, events, now, actor):
     already_escalated = []
 
     for ticket in tickets:
-        if not is_overdue(ticket, now):
+        ticket_for_check = ticket
+        if isinstance(ticket.get("due_at"), str):
+            try:
+                dt = datetime.datetime.fromisoformat(ticket["due_at"])
+                ticket_for_check = dict(ticket, due_at=dt)
+            except (ValueError, TypeError):
+                ticket_for_check = ticket
+
+        if not is_overdue(ticket_for_check, now):
             continue
 
         ticket_id = ticket["id"]

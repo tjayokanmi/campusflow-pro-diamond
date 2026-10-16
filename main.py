@@ -27,6 +27,7 @@ from campusflow.workflow import (
 )
 from campusflow.reports import generate_report
 from campusflow.history import get_ticket_history
+from campusflow.sla import escalate_overdue
 
 def print_ticket_summary(ticket: dict) -> None:
     """Print a single line summary of a ticket."""
@@ -102,7 +103,19 @@ def handle_create_ticket(tickets: list[dict], data_path: str, events: list[dict]
                 print("[Cancelled] Ticket creation cancelled.")
                 return
 
-        tickets.append(new_ticket)
+        if events is not None:
+            new_ticket = create_ticket_with_audit(
+                tickets,
+                events,
+                title=title,
+                category=category,
+                urgency=urgency,
+                affected_users=affected_users,
+                actor="Operator",
+                confirm_duplicate=True,
+            )
+        else:
+            tickets.append(new_ticket)
         save_tickets(tickets, data_path, events=events)
         print(f"[Success] Ticket {new_ticket.get('id')} created successfully with priority '{new_ticket.get('priority')}'.")
 
@@ -142,7 +155,10 @@ def handle_assign_ticket(tickets: list[dict], data_path: str, events: list[dict]
     tid = input("Enter ticket ID to assign: ").strip()
     staff = input("Enter staff member name: ")
     try:
-        updated = assign_ticket(tickets, tid, staff)
+        if events is not None:
+            updated = assign_ticket_with_audit(tickets, events, tid, staff, actor="Operator")
+        else:
+            updated = assign_ticket(tickets, tid, staff)
         save_tickets(tickets, data_path, events=events)
         print(f"[Success] Ticket {tid} assigned to '{updated.get('assigned_to')}'.")
     except ValueError as err:
@@ -180,7 +196,10 @@ def handle_update_status(tickets: list[dict], data_path: str, events: list[dict]
     print("Allowed statuses: open, in_progress, resolved")
     new_status = input("Enter new status: ").strip()
     try:
-        updated = update_status(tickets, tid, new_status)
+        if events is not None:
+            updated = update_status_with_audit(tickets, events, tid, new_status, actor="Operator")
+        else:
+            updated = update_status(tickets, tid, new_status)
         save_tickets(tickets, data_path, events=events)
         print(f"[Success] Ticket {tid} status updated to '{updated.get('status')}'.")
     except ValueError as err:
@@ -192,11 +211,48 @@ def handle_reopen_ticket(tickets: list[dict], data_path: str, events: list[dict]
     print("\n--- Reopen Resolved Ticket ---")
     tid = input("Enter resolved ticket ID to reopen: ").strip()
     try:
-        updated = reopen_ticket(tickets, tid)
+        if events is not None:
+            updated = reopen_ticket_with_audit(tickets, events, tid, actor="Operator")
+        else:
+            updated = reopen_ticket(tickets, tid)
         save_tickets(tickets, data_path, events=events)
         print(f"[Success] Ticket {tid} reopened to status '{updated.get('status')}'.")
     except ValueError as err:
         print(f"[Error] Reopening failed: {err}")
+
+
+def handle_check_escalations(tickets: list[dict], data_path: str, events: list[dict] | None = None) -> None:
+    """Evaluate unresolved tickets and escalate overdue ones."""
+    if events is None:
+        events = []
+
+    now = datetime.now(timezone.utc)
+    try:
+        result = escalate_overdue(tickets, events, now, actor="Operator")
+    except Exception as err:
+        print(f"[Error] Failed to evaluate escalations: {err}")
+        return
+
+    escalated = result["escalated"]
+    already = result["already_escalated"]
+
+    print("\n--- SLA Escalation Check ---")
+    print(f"Timestamp (UTC):     {now.isoformat()}")
+    print(f"Newly escalated:     {len(escalated)} ticket(s)")
+    if escalated:
+        print(f"  Ticket IDs:        {', '.join(escalated)}")
+    print(f"Already escalated:   {len(already)} ticket(s)")
+    if already:
+        print(f"  Ticket IDs:        {', '.join(already)}")
+
+    if escalated:
+        try:
+            save_tickets(tickets, data_path, events=events)
+            print("[Success] Audit events recorded and state saved.")
+        except Exception as err:
+            print(f"[Error] Failed to save state after escalation: {err}")
+    else:
+        print("No new tickets escalated.")
 
 
 def handle_work_queue(tickets: list[dict]) -> None:
@@ -302,12 +358,13 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
         print("7. View Work Queue")
         print("8. View Reports")
         print("9. View SLA Attention Queue")
-        print("10. View Ticket History")
-        print("11. Engineering Knowledge Lab")
-        print("12. Exit")
+        print("10. Check & Escalate Overdue Tickets")
+        print("11. View Ticket History")
+        print("12. Engineering Knowledge Lab")
+        print("13. Exit")
 
         try:
-            choice = input("\nSelect an option (1-12): ").strip()
+            choice = input("\nSelect an option (1-13): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nExiting CampusFlow. Goodbye!")
             break
@@ -330,15 +387,17 @@ def main_menu(data_path: str = DEFAULT_DATA_PATH) -> None:
             handle_reports(tickets, events)
         elif choice == "9":
             handle_sla_attention_queue(tickets)
-
         elif choice == "10":
-            handle_ticket_history(events)
+            handle_check_escalations(tickets, data_path, events=events)
         elif choice == "11":
-            run_knowledge_lab()
-
+            handle_ticket_history(events)
         elif choice == "12":
+            run_knowledge_lab()
+        elif choice == "13":
             print("Exiting CampusFlow. Goodbye!")
             break
+        else:
+            print("[Error] Invalid option. Please enter a number between 1 and 13.")
 
 if __name__ == "__main__":
     main_menu()

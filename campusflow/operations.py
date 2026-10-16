@@ -1,6 +1,7 @@
 """Audited ticket operations for CampusFlow Pro."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 from campusflow.tickets import create_ticket
 from campusflow.workflow import (
@@ -21,6 +22,7 @@ def create_ticket_with_audit(
     affected_users,
     actor,
     confirm_duplicate=False,
+    now=None,
 ):
     """Create a ticket and record its audit event."""
 
@@ -33,6 +35,7 @@ def create_ticket_with_audit(
         urgency,
         affected_users,
         records=temp_tickets,
+        now=now,
     )
 
     duplicates = detect_duplicates(
@@ -49,6 +52,13 @@ def create_ticket_with_audit(
 
     temp_tickets.append(ticket)
 
+    event_now = None
+    if isinstance(ticket.get("created_at"), str):
+        try:
+            event_now = datetime.fromisoformat(ticket["created_at"])
+        except (ValueError, TypeError):
+            event_now = None
+
     record_event(
         temp_events,
         ticket["id"],
@@ -57,6 +67,7 @@ def create_ticket_with_audit(
         None,
         "open",
         "Ticket created",
+        now=event_now,
     )
 
     tickets[:] = temp_tickets
@@ -71,6 +82,7 @@ def assign_ticket_with_audit(
     ticket_id,
     staff_name,
     actor,
+    now=None,
 ):
     """Assign a ticket and record the successful assignment."""
 
@@ -91,6 +103,7 @@ def assign_ticket_with_audit(
         ticket["status"],
         ticket["status"],
         f"Assigned to {staff_name}",
+        now=now,
     )
 
     tickets[:] = temp_tickets
@@ -105,6 +118,7 @@ def update_status_with_audit(
     ticket_id,
     new_status,
     actor,
+    now=None,
 ):
     """Update ticket status and record the transition."""
 
@@ -143,6 +157,7 @@ def update_status_with_audit(
         before_status,
         updated_ticket["status"],
         f"Status changed from {before_status} to {updated_ticket['status']}",
+        now=now,
     )
 
     tickets[:] = temp_tickets
