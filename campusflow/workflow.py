@@ -1,4 +1,5 @@
-"""Workflow, assignment, and work queue management for CampusFlow tickets."""
+from datetime import datetime, timezone, timedelta
+from campusflow.sla import calculate_due_at
 
 ALLOWED_STATUSES = ("open", "in_progress", "resolved")
 PRIORITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -117,12 +118,14 @@ def update_status(tickets: list[dict], ticket_id: str, new_status: str) -> dict:
     raise ValueError(f"Disallowed status transition from '{current_status}' to '{target_status}'")
 
 
-def reopen_ticket(tickets: list[dict], ticket_id: str) -> dict:
+def reopen_ticket(tickets: list[dict], ticket_id: str, now: datetime | None = None) -> dict:
     """Explicitly reopen a resolved ticket back to 'open' status.
 
     Rules:
         - Only tickets with status 'resolved' can be reopened.
         - Reopened tickets may resume normal lifecycle progression.
+        - created_at is preserved unchanged.
+        - Reopening starts a new SLA cycle at the reopening timestamp, recalculating due_at.
 
     Returns:
         The updated ticket dictionary.
@@ -135,7 +138,32 @@ def reopen_ticket(tickets: list[dict], ticket_id: str) -> dict:
             f"Only resolved tickets can be reopened. Ticket '{ticket_id}' is currently '{current_status}'."
         )
 
+    if now is not None:
+        if not isinstance(now, datetime):
+            raise TypeError("now must be a datetime")
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        if now.utcoffset() != timedelta(0):
+            raise ValueError("now must have a UTC offset of zero")
+    else:
+        now = datetime.now(timezone.utc)
+
     ticket["status"] = "open"
+
+    priority = ticket.get("priority")
+    if priority and "due_at" in ticket:
+        new_due = calculate_due_at(priority, now)
+        if isinstance(ticket.get("due_at"), str):
+            ticket["due_at"] = new_due.isoformat()
+        else:
+            ticket["due_at"] = new_due
+
+    if "escalation_cycle" in ticket:
+        ticket["escalation_cycle"] = ticket.get("escalation_cycle", 0) + 1
+
+    if "updated_at" in ticket:
+        ticket["updated_at"] = now.isoformat()
+
     return ticket
 
 

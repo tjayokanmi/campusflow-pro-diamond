@@ -156,8 +156,13 @@ def reopen_ticket_with_audit(
     events,
     ticket_id,
     actor,
+    now=None,
 ):
     """Reopen a resolved ticket and record the event."""
+    from datetime import datetime, timezone
+
+    if now is None:
+        now = datetime.now(timezone.utc)
 
     temp_tickets = deepcopy(tickets)
     temp_events = deepcopy(events)
@@ -165,6 +170,7 @@ def reopen_ticket_with_audit(
     ticket = reopen_ticket(
         temp_tickets,
         ticket_id,
+        now=now,
     )
 
     record_event(
@@ -175,6 +181,7 @@ def reopen_ticket_with_audit(
         "resolved",
         "open",
         "Ticket reopened",
+        now=now,
     )
 
     tickets[:] = temp_tickets

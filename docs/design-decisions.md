@@ -159,3 +159,67 @@ During repository inspection of Engineer A's code in `campusflow/tickets.py` and
 5. **Bare Assertions in `tests/test_priority.py`**:
    - Top-level `assert` statements fail with `NameError` under `python -m unittest discover` because `calculate_priority` is not imported and assertions are not inside a `unittest.TestCase`.
    - Proposed safe solution: Wrap assertions in a standard `unittest.TestCase` class with `from campusflow.priority import calculate_priority`.
+
+---
+
+## 5. Phase 2 Architecture & Design Decisions (Engineer A)
+
+### 5.1 SLA Deadline Engine & Strict UTC Validation
+- **Durations**:
+  - `critical`: 60 minutes (`timedelta(hours=1)`)
+  - `high`: 240 minutes (`timedelta(hours=4)`)
+  - `medium`: 1,440 minutes (`timedelta(days=1)`)
+  - `low`: 2,880 minutes (`timedelta(days=2)`)
+- **Strict UTC Enforced**: All datetime arguments (`cycle_start`, `now`, `due_at`) must be timezone-aware with UTC offset 0 (`utcoffset() == timedelta(0)`). Naive datetimes or non-UTC offsets raise `ValueError`. Non-datetime types raise `TypeError`.
+- **Strict Boundary Comparison**:
+  - `is_overdue(ticket, now)` returns `status != "resolved" and due_at < now`.
+  - Exactly at the deadline (`due_at == now`), a ticket is strictly **not overdue**. Only after passing the deadline (`due_at < now`) does it become overdue.
+
+### 5.2 Escalation-Cycle Idempotency Strategy
+- **Problem**: When `escalate_overdue` runs repeatedly, overdue tickets must not receive duplicate escalation events within the same SLA cycle. However, when a resolved ticket is reopened, it enters a new SLA cycle and must be eligible for escalation again if its new deadline passes.
+- **Evaluated Strategies**:
+  1. *Mutable in-memory ticket flag (`ticket["is_escalated"] = True`)*:
+     - *Flaw*: Fails to survive session reloads unless serialized into ticket schema; introduces mutation into an operation that must not alter ticket attributes.
+  2. *Strict Event Schema Pattern Matching (`event["event_type"] == "ESCALATE"`)*:
+     - *Flaw*: Fragile against schema variations between modules or historical versions (e.g., uppercase `"ESCALATE"` vs lowercase `"escalated"`, string details vs dict details).
+  3. *Chronological Event History Cycle Derivation (Chosen Strategy)*:
+     - Scans `events` chronologically for `ticket_id`.
+     - A reopening event (detected via `before_status="resolved" and after_status="open"`, or `event_type` containing "reopen") resets the cycle's escalation flag to `False`.
+     - An escalation event (`event_type` matching "escalate" or "escalated") sets the flag to `True`.
+     - *Trade-offs*: $O(N)$ scan over events list per ticket; negligible overhead given helpdesk scale, but provides complete crash resilience, schema tolerance, and guarantees that reopening permits re-escalation without deleting or altering previous audit events.
+- **Side Effects**: Escalation creates an audit event (`event_type="escalated"`, `details="SLA deadline exceeded"`) and reports ticket IDs in `{"escalated": [...], "already_escalated": [...]}` without altering ticket priority, status, or assignee.
+
+### 5.3 Reopening Semantics & SLA Reset
+- When a ticket is reopened (`reopen_ticket` / `reopen_ticket_with_audit`):
+  - `ticket["status"]` is set to `"open"`.
+  - `ticket["created_at"]` remains strictly **unchanged**.
+  - `ticket["due_at"]` is recalculated from the reopening timestamp using `calculate_due_at(priority, reopen_time)`.
+  - `ticket["escalation_cycle"]` is incremented if present.
+  - A `"REOPEN"` event is appended to the audit trail.
+
+### 5.4 Schema Version 2 JSON Persistence
+- **Structure**:
+  ```json
+  {
+    "schema_version": 2,
+    "tickets": [],
+    "events": []
+  }
+  ```
+- **Validation Pipeline**:
+  - Root must be a `dict` with `schema_version == 2`.
+  - Both `tickets` and `events` must be lists.
+  - Every ticket is validated for required fields (`id`, `title`, `category`, `urgency`, `affected_users >= 1`, `priority`, `status`, `assigned_to`).
+  - Ticket IDs must be unique across `tickets`.
+  - Every event is validated for required fields (`event_id`, `ticket_id`, `event_type`, `actor`, `timestamp`, `before_status`, `after_status`, `details`).
+  - Event IDs must be unique across `events`.
+  - **Relational Integrity**: Every event's `ticket_id` must reference an existing ticket in `tickets`.
+- **Atomicity & Crash Safety**:
+  - Data is validated in-memory before file creation.
+  - Formatted JSON is written to a temporary file via `tempfile.NamedTemporaryFile` in the same target directory.
+  - Buffer is flushed and synced with `os.fsync`.
+  - Destination file is replaced atomically via `os.replace`.
+  - In case of write failure, the temporary file is unlinked and the destination remains untouched.
+- **Ticket ID Continuity**:
+  - `generate_ticket_id(records)` extracts numeric suffixes from all loaded tickets, takes `max()`, and formats the next sequential ID `f"T{max + 1:03d}"`. This guarantees strictly increasing, non-colliding IDs across reloads.
+

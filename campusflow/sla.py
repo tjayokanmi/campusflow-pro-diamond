@@ -62,6 +62,41 @@ def is_overdue(ticket, now):
     return status != "resolved" and due_at < now
 
 def escalate_overdue(tickets, events, now, actor):
+    """Identify overdue tickets, escalate them, and record audit events idempotently.
+
+    Rules:
+        - now must be a timezone-aware UTC datetime.
+        - tickets and events must be lists.
+        - actor must be a non-empty string.
+        - Unresolved tickets whose deadline has passed (due_at < now) are eligible.
+        - Escalation is idempotent within each SLA cycle: repeated checks produce at most
+          one escalation event per cycle.
+        - Reopening a resolved ticket starts a new SLA cycle and permits re-escalation.
+        - Ticket priority, status, and assignment are not mutated by escalation.
+
+    Returns:
+        dict: {"escalated": list[str], "already_escalated": list[str]}
+    """
+    if not isinstance(now, datetime.datetime):
+        raise TypeError("now must be a datetime")
+
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+
+    if now.utcoffset() != datetime.timedelta(0):
+        raise ValueError("now must have a UTC offset of zero")
+
+    if not isinstance(tickets, list):
+        raise TypeError("tickets must be a list")
+
+    if not isinstance(events, list):
+        raise TypeError("events must be a list")
+
+    if not isinstance(actor, str) or not actor.strip():
+        raise ValueError("actor must be a non-empty string")
+
+    actor = actor.strip()
+
     escalated = []
     already_escalated = []
 
@@ -71,11 +106,30 @@ def escalate_overdue(tickets, events, now, actor):
 
         ticket_id = ticket["id"]
 
-        has_escalation = any(
-            event["ticket_id"] == ticket_id
-            and event["event_type"] == "escalated"
-            for event in events
-        )
+        has_escalation = False
+
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+
+            if event.get("ticket_id") != ticket_id:
+                continue
+
+            # A reopening starts a new SLA cycle.
+            # Handle schema variations gracefully without assuming specific keys exist.
+            is_reopen = (
+                (event.get("before_status") == "resolved" and event.get("after_status") == "open")
+                or str(event.get("event_type", "")).upper() in ("REOPEN", "REOPENED")
+                or (isinstance(event.get("details"), str) and "reopen" in event.get("details", "").lower())
+            )
+            is_escalate = (
+                str(event.get("event_type", "")).lower() in ("escalate", "escalated")
+            )
+
+            if is_reopen:
+                has_escalation = False
+            elif is_escalate:
+                has_escalation = True
 
         if has_escalation:
             already_escalated.append(ticket_id)

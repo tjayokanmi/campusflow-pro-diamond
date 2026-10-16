@@ -93,12 +93,16 @@ Run the complete automated test suite using `unittest`:
 python3 -m unittest discover -s tests -v
 ```
 
-All 42 automated tests should pass:
+All 96 automated tests should pass:
 - `test_priority.py`: 1 test (covering priority calculation boundaries)
 - `test_tickets.py`: 7 tests (creation validation, boundary checks, ID generation)
 - `test_workflow.py`: 22 tests (assignment, transition matrix, unassigned guards, reopening, queue sorting, tie-breaking)
-- `test_reports.py`: 5 tests (empty lists, mixed counts, zero-count preservation, mutation checks)
-- `test_storage.py`: 7 tests (round-trip persistence, atomic replacement, corruption handling, sequential ID reload)
+- `test_reports.py`: 8 tests (empty lists, mixed counts, zero-count preservation, mutation checks, SLA metrics)
+- `test_sla.py`: 16 tests (SLA durations, UTC validation, boundary thresholds)
+- `test_escalation.py`: 10 tests (idempotent escalation, reopening cycles, boundary thresholds, non-mutation)
+- `test_storage.py`: 23 tests (v1 legacy & v2 schema validation, round trips, corruption handling, relational checks, ID continuity, migration)
+- `test_operations.py`: 6 tests (audited operations, rollback on failure)
+- `test_knowledge_lab.py`: 3 tests (knowledge lab evaluation and scoring)
 
 ---
 

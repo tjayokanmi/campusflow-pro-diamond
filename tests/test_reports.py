@@ -71,83 +71,81 @@ class TestReports(unittest.TestCase):
             generate_report("invalid")
 
 
+    def test_report_counts_overdue_unresolved_tickets(self):
+        from datetime import datetime, timezone
+
+        now = datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc)
+
+        tickets = [
+            {
+                "id": "T001",
+                "status": "open",
+                "priority": "high",
+                "due_at": "2026-10-14T14:00:00+00:00",
+            },
+            {
+                "id": "T002",
+                "status": "in_progress",
+                "priority": "medium",
+                "due_at": "2026-10-14T16:00:00+00:00",
+            },
+            {
+                "id": "T003",
+                "status": "resolved",
+                "priority": "critical",
+                "due_at": "2026-10-14T12:00:00+00:00",
+            },
+        ]
+
+        report = generate_report(tickets, now=now)
+
+        self.assertEqual(report["overdue_count"], 1)
+
+    def test_report_does_not_count_deadline_as_overdue(self):
+        from datetime import datetime, timezone
+
+        now = datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc)
+
+        tickets = [
+            {
+                "id": "T001",
+                "status": "open",
+                "priority": "critical",
+                "due_at": "2026-10-14T15:00:00+00:00",
+            }
+        ]
+
+        report = generate_report(tickets, now=now)
+
+        self.assertEqual(report["overdue_count"], 0)
+
+    def test_report_counts_escalation_only_in_current_cycle(self):
+        tickets = [
+            {
+                "id": "T001",
+                "status": "open",
+                "priority": "high",
+                "escalation_cycle": 2,
+            }
+        ]
+
+        events = [
+            {
+                "ticket_id": "T001",
+                "event_type": "ESCALATE",
+                "details": {"escalation_cycle": 1},
+            },
+            {
+                "ticket_id": "T001",
+                "event_type": "ESCALATE",
+                "details": {"escalation_cycle": 2},
+            },
+        ]
+
+        report = generate_report(tickets, events=events)
+
+        self.assertEqual(report["escalated_count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-def test_report_counts_overdue_unresolved_tickets(self):
-    from datetime import datetime, timezone
-
-    now = datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc)
-
-    tickets = [
-        {
-            "id": "T001",
-            "status": "open",
-            "priority": "high",
-            "due_at": "2026-10-14T14:00:00+00:00",
-        },
-        {
-            "id": "T002",
-            "status": "in_progress",
-            "priority": "medium",
-            "due_at": "2026-10-14T16:00:00+00:00",
-        },
-        {
-            "id": "T003",
-            "status": "resolved",
-            "priority": "critical",
-            "due_at": "2026-10-14T12:00:00+00:00",
-        },
-    ]
-
-    report = generate_report(tickets, now=now)
-
-    self.assertEqual(report["overdue_count"], 1)
-
-
-def test_report_does_not_count_deadline_as_overdue(self):
-    from datetime import datetime, timezone
-
-    now = datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc)
-
-    tickets = [
-        {
-            "id": "T001",
-            "status": "open",
-            "priority": "critical",
-            "due_at": "2026-10-14T15:00:00+00:00",
-        }
-    ]
-
-    report = generate_report(tickets, now=now)
-
-    self.assertEqual(report["overdue_count"], 0)
-
-
-def test_report_counts_escalation_only_in_current_cycle(self):
-    tickets = [
-        {
-            "id": "T001",
-            "status": "open",
-            "priority": "high",
-            "escalation_cycle": 2,
-        }
-    ]
-
-    events = [
-        {
-            "ticket_id": "T001",
-            "event_type": "ESCALATE",
-            "details": {"escalation_cycle": 1},
-        },
-        {
-            "ticket_id": "T001",
-            "event_type": "ESCALATE",
-            "details": {"escalation_cycle": 2},
-        },
-    ]
-
-    report = generate_report(tickets, events=events)
-
-    self.assertEqual(report["escalated_count"], 1)
