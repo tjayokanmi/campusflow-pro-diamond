@@ -101,6 +101,9 @@ def escalate_overdue(tickets, events, now, actor):
     already_escalated = []
 
     for ticket in tickets:
+        if not isinstance(ticket, dict) or "due_at" not in ticket or ticket.get("due_at") is None:
+            continue
+
         ticket_for_check = ticket
         if isinstance(ticket.get("due_at"), str):
             try:
