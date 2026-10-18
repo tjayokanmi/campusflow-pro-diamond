@@ -1,0 +1,46 @@
+[
+    {
+        "participant": "Engineer A",
+        "timestamp": "2026-10-16T16:18:30.537562+00:00",
+        "choices": [
+            "B",
+            "B",
+            "C",
+            "B",
+            "C",
+            "D",
+            "B",
+            "C",
+            "B",
+            "D"
+        ],
+        "score": 10,
+        "explanations": {
+            "1": "A ticket due at 11:00 is on time at exactly 11:00:00 UTC; overdue detection requires now > due_at strictly per Section 3 SLA specifications.",
+            "5": "Escalation is idempotent within each SLA cycle. Repeated scans must produce at most one escalation event until a reopen starts a new cycle.",
+            "8": "eval() executes arbitrary code and introduces security vulnerabilities; json.loads with schema validation is the safe approach."
+        }
+    },
+    {
+        "participant": "Engineer B",
+        "timestamp": "2026-10-16T16:18:30.537603+00:00",
+        "choices": [
+            "B",
+            "B",
+            "C",
+            "B",
+            "C",
+            "D",
+            "B",
+            "C",
+            "B",
+            "D"
+        ],
+        "score": 10,
+        "explanations": {
+            "1": "At the exact deadline instant, a ticket is due but not yet overdue. Overdue requires strictly greater than the deadline time.",
+            "5": "Audit history tracks the escalation event so subsequent checks identify the existing escalation and prevent duplicates.",
+            "8": "eval() should never be used for deserialization due to code injection risks; robust schema validation is essential."
+        }
+    }
+]

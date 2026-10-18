@@ -64,15 +64,33 @@ def generate_report(
             if now > deadline:
                 overdue_count += 1
 
+        tid = ticket.get("id")
         current_cycle = ticket.get("escalation_cycle", 0)
 
-        was_escalated = any(
-            event.get("ticket_id") == ticket.get("id")
-            and event.get("event_type") == "ESCALATE"
-            and isinstance(event.get("details"), dict)
-            and event["details"].get("escalation_cycle") == current_cycle
-            for event in events
-        )
+        was_escalated = False
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            if event.get("ticket_id") != tid:
+                continue
+
+            event_type = str(event.get("event_type", ""))
+            is_reopen = (
+                (event.get("before_status") == "resolved" and event.get("after_status") == "open")
+                or event_type.upper() in ("REOPEN", "REOPENED")
+                or (isinstance(event.get("details"), str) and "reopen" in event.get("details", "").lower())
+            )
+            is_escalate = event_type.lower() in ("escalate", "escalated")
+
+            if is_reopen:
+                was_escalated = False
+            elif is_escalate:
+                if isinstance(event.get("details"), dict) and "escalation_cycle" in event["details"]:
+                    if event["details"]["escalation_cycle"] == current_cycle:
+                        was_escalated = True
+                else:
+                    was_escalated = True
+
         if was_escalated:
             escalated_count += 1
 

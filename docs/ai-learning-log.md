@@ -67,16 +67,65 @@ This document records the deliberate AI-assisted learning loops completed by the
 
 ---
 
-## Engineer A (Theophilus Jacob / tjayokanmi) Learning Loops (Partner Record)
+## Engineer A (Theophilus Jacob / tjayokanmi) Learning Loops
 
-- **Loop 1: Input Validation and Boundary Checking in Python**
-  - *Topic*: Validating non-empty strings, positive integer ranges, and tuple inclusion for category validation.
-  - *Status*: (Coordinated with Engineer A; recorded in partner sprint records).
+### Learning Loop 1: Timezone-Aware UTC Enforcement and SLA Boundary Logic
+- **Concept / Question**:
+  - Why is comparing naive `datetime` with timezone-aware `datetime` disallowed in Python, and how do we strictly validate that inputs have a UTC offset of zero?
+  - At the exact minute a deadline expires (e.g. 60 minutes after ticket creation), should a ticket be classified as overdue or on-time?
+- **AI Explanation Summary**:
+  - Python raises `TypeError: can't compare offset-naive and offset-aware datetimes` to prevent timezone ambiguity.
+  - To enforce UTC strictly: verify `dt.tzinfo is not None and dt.utcoffset() is not None`, then check `dt.utcoffset() == datetime.timedelta(0)`.
+  - Service Level Agreements define deadlines as the boundary until which service is compliant. Therefore, `due_at == now` is compliant (not overdue). A ticket is overdue strictly when `due_at < now`.
+- **Tiny Experiment**:
+  - Tested `is_overdue({"due_at": now, "status": "open"}, now)`.
+  - Confirmed `now < now` evaluates to `False`, correctly preventing premature escalation at the exact deadline second.
+- **Verification & Outcome**:
+  - Implemented in `campusflow/sla.py` (`calculate_due_at`, `is_overdue`).
+  - Tested in `tests/test_sla.py` and `tests/test_escalation.py` (`test_critical_deadline_boundary_60_and_61_minutes`).
+- **Fellow Reflection**:
+  - *Takeaway*: Using explicit UTC offset checks (`utcoffset() == timedelta(0)`) prevents subtle bugs where non-UTC timezone-aware timestamps (like UTC+2) bypass naive checks but calculate inaccurate duration deltas.
 
-- **Loop 2: Priority Calculation Engine Design**
-  - *Topic*: Sequential evaluation of compound boolean rules (urgency + affected users) with deterministic fallbacks.
-  - *Status*: (Coordinated with Engineer A; recorded in partner sprint records).
+---
 
+### Learning Loop 2: Escalation-Cycle Idempotency and Critical Evaluation of AI Advice
+- **Concept / Question**:
+  - How do we implement idempotent escalation checks so that repeated background runs do not spam duplicate escalation events, while still allowing a ticket to be legitimately re-escalated if it is reopened after resolution?
+- **Initial AI Suggestion**:
+  - The AI suggested adding an `is_escalated: bool` field directly to the ticket dictionary: `ticket["is_escalated"] = True` upon escalation, and resetting `ticket["is_escalated"] = False` upon reopening.
+- **Critical Evaluation & Flaw Identification**:
+  - *Identified flaw*: Mutating ticket fields during `escalate_overdue` directly violates the engineering requirement that escalation must not change ticket priority, status, or assignment. Furthermore, in-memory flags do not persist across restarts unless added to the ticket schema, breaking compatibility with existing Phase 1 tickets.
+  - *Correction applied*: Rejected the mutable ticket flag suggestion. Instead, implemented cycle derivation from the append-only event history:
+    - Iterate chronologically through `events` for `ticket_id`.
+    - If a reopening event is encountered (`before_status == "resolved"` and `after_status == "open"`, or `event_type` is `"REOPEN"`), reset `has_escalation = False`.
+    - If an escalation event is encountered (`event_type` matching `"escalate"` or `"escalated"`), set `has_escalation = True`.
+- **Tiny Experiment & Verification**:
+  - Created a test scenario in `tests/test_escalation.py` (`test_reopen_starts_new_sla_cycle_and_allows_re_escalation`):
+    1. Ticket escalates in cycle 1 -> 1 event recorded.
+    2. Repeated check in cycle 1 -> 0 new events, reported in `already_escalated`.
+    3. Ticket resolved and reopened at new timestamp -> new `due_at` calculated.
+    4. New deadline breached in cycle 2 -> 2nd escalation event recorded.
+    5. Repeated check in cycle 2 -> 0 new events, reported in `already_escalated`.
+  - Test passed cleanly, proving cycle idempotency without ticket mutation.
+
+---
+
+### Learning Loop 3: Schema Version 2 JSON Persistence & Relational Validation
+- **Concept / Question**:
+  - How should we transition CampusFlow from a raw list of tickets to an extensible Schema Version 2 object (`{"schema_version": 2, "tickets": [], "events": []}`) while guaranteeing atomicity and relational integrity?
+- **AI Explanation Summary**:
+  - Validating foreign-key-style relations in JSON storage requires validating the parent records (`tickets`) first, collecting valid primary keys (`ticket["id"]`), and then validating that child records (`events`) reference existing parent IDs.
+  - In-memory validation must occur before writing any bytes to disk to ensure invalid data never touches physical storage.
+- **Tiny Experiment**:
+  - Attempted saving an event referencing ticket ID `"T999"` when only `"T001"` existed.
+  - Verified that `save_v2` immediately raised `ValueError("Event references unknown ticket ID 'T999'")`, leaving the target file intact.
+- **Verification & Outcome**:
+  - Implemented `save_v2`, `load_v2`, `validate_v2_payload`, and `migrate_v1_to_v2` in `campusflow/storage.py`.
+  - Added 16 tests in `TestStorageV2` within `tests/test_storage.py` covering round trips, corruption handling, relational checks, and sequential ID continuity.
+- **Fellow Reflection**:
+  - *Takeaway*: Atomic file replacement (`os.replace`) coupled with pre-write schema validation guarantees zero file corruption during power cuts, unexpected process termination, or invalid input submissions.
+
+<<<<<<< HEAD
 - **Loop 3: Formatted String Sequential ID Generation**
   - *Topic*: Parsing max existing numeric ID and formatting with zero padding `f"T{max_id + 1:03d}"`.
   - *Status*: (Coordinated with Engineer A; recorded in partner sprint records).
@@ -243,3 +292,5 @@ I learned that Python compares tuple elements from left to right.
 I also learned that sorted() returns a new list, allowing
 the queue to be generated without reordering the original
 ticket collection.
+=======
+>>>>>>> origin/main
