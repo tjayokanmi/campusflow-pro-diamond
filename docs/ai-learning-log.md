@@ -125,3 +125,172 @@ This document records the deliberate AI-assisted learning loops completed by the
 - **Fellow Reflection**:
   - *Takeaway*: Atomic file replacement (`os.replace`) coupled with pre-write schema validation guarantees zero file corruption during power cuts, unexpected process termination, or invalid input submissions.
 
+<<<<<<< HEAD
+- **Loop 3: Formatted String Sequential ID Generation**
+  - *Topic*: Parsing max existing numeric ID and formatting with zero padding `f"T{max_id + 1:03d}"`.
+  - *Status*: (Coordinated with Engineer A; recorded in partner sprint records).
+
+
+
+## Engineer B — Current Sprint Learning Loops
+
+
+### Learning Loop 1: Duplicate Detection and Title Normalization
+
+**Concept / Question**
+
+How can CampusFlow identify duplicate tickets when users enter
+the same title with different capitalization or spacing?
+
+**AI Explanation Summary**
+
+AI explained that comparing raw strings can miss duplicates.
+
+For example:
+
+"Network Down"
+"  network   down  "
+
+These represent the same title but are not equal as raw strings.
+
+AI suggested normalizing titles using:
+
+" ".join(title.casefold().split())
+
+**Implementation**
+
+Implemented normalize_title() and detect_duplicates()
+in campusflow/duplicates.py.
+
+The duplicate checker compares normalized titles and categories
+and considers unresolved tickets.
+
+**Verification**
+
+Created automated tests covering:
+- Different capitalization.
+- Extra whitespace.
+- Matching unresolved tickets.
+- Resolved tickets.
+- Different categories.
+
+The tests passed.
+
+**Learning Outcome**
+
+I learned how string normalization improves duplicate detection
+without requiring external libraries.
+
+I also learned that duplicate detection should warn the user
+rather than automatically reject a legitimate ticket.
+
+
+### Learning Loop 2: Audit Events and Transaction Safety
+
+**Concept / Question**
+
+How can we guarantee that a failed ticket operation does not
+leave behind an audit event or partially modify a ticket?
+
+**AI Explanation Summary**
+
+AI suggested using deepcopy() to create temporary copies
+of tickets and events.
+
+Operations run against those copies.
+
+The original collections are updated only after the operation
+succeeds.
+
+**Implementation**
+
+Implemented audited operation wrappers in:
+
+campusflow/operations.py
+
+Also introduced run_audited_operation() in main.py.
+
+**Independent Experiment**
+
+Created tests that simulate:
+- Successful assignment.
+- Assignment to a nonexistent ticket.
+- Successful status transition.
+- Storage failure.
+- Missing combined storage interface.
+
+**Verification**
+
+Ran:
+
+python3 -m unittest tests.test_cli_integration -v
+
+All five integration tests passed.
+
+**Critical Evaluation of AI Suggestion**
+
+The original temporary-copy approach protected against
+validation failures but did not protect against storage failures.
+
+I extended the design to publish changes only after persistence
+succeeds.
+
+**Learning Outcome**
+
+I learned that successful validation does not guarantee a
+successful transaction.
+
+I also learned the distinction between in-memory consistency
+and durable storage.
+
+
+### Learning Loop 3: SLA Attention Queue and Deterministic Sorting
+
+**Concept / Question**
+
+How can CampusFlow prioritize overdue tickets while ensuring
+that tickets with equal deadlines are ordered consistently?
+
+**AI Explanation Summary**
+
+AI explained that Python's sorted() function supports
+multiple sorting criteria through tuple keys.
+
+The queue should prioritize:
+
+1. Overdue tickets.
+2. Earlier SLA deadlines.
+3. Lower numeric ticket IDs.
+
+**Implementation**
+
+Implemented sla_attention_queue() in campusflow/queues.py.
+
+The sorting key uses:
+
+(not overdue, due_at, ticket_number)
+
+**Independent Experiment**
+
+Tested tickets with:
+- Different SLA deadlines.
+- Overdue and non-overdue statuses.
+- Equal deadlines.
+- Different numeric ticket IDs.
+- Resolved statuses.
+
+**Verification**
+
+Created automated tests in tests/test_queues.py.
+
+The tests passed.
+
+**Learning Outcome**
+
+I learned that Python compares tuple elements from left to right.
+
+I also learned that sorted() returns a new list, allowing
+the queue to be generated without reordering the original
+ticket collection.
+=======
+>>>>>>> origin/main
